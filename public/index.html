@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The ROC Curve Playbook | Insurance Risk Analytics</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d0d0d;
+            --bg-secondary: #161616;
+            --bg-tertiary: #1f1f1f;
+            --bg-card: #1a1a1a;
+            --text-primary: #f5f5f0;
+            --text-secondary: #a8a8a0;
+            --text-muted: #6b6b65;
+            --accent-gold: #d4a853;
+            --accent-gold-dim: #b8923f;
+            --accent-amber: #e8a849;
+            --accent-copper: #c17f59;
+            --accent-emerald: #4ade80;
+            --accent-rose: #f472b6;
+            --accent-sky: #38bdf8;
+            --accent-red: #ef4444;
+            --accent-yellow: #fbbf24;
+            --border-subtle: rgba(255,255,255,0.06);
+            --border-medium: rgba(255,255,255,0.12);
+            --gradient-gold: linear-gradient(135deg, #d4a853 0%, #e8c77b 50%, #d4a853 100%);
+            --shadow-glow: 0 0 60px rgba(212, 168, 83, 0.15);
+            --font-display: 'Fraunces', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            font-size: 17px;
+            overflow-x: hidden;
+        }
+
+        /* Noise texture overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba(212, 168, 83, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 60%, rgba(193, 127, 89, 0.06) 0%, transparent 40%);
+            animation: heroGlow 20s ease-in-out infinite;
+        }
+
+        @keyframes heroGlow {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(-5%, 5%) rotate(3deg); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            max-width: 900px;
+        }
+
+        .hero-eyebrow {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent-gold);
+            margin-bottom: 30px;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.2s;
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 300;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            margin-bottom: 30px;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.4s;
+        }
+
+        .hero-title em {
+            font-style: italic;
+            color: var(--accent-gold);
+        }
+
+        .hero-subtitle {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 50px;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.6s;
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 1s;
+        }
+
+        .scroll-indicator span {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+
+        .scroll-line {
+            width: 1px;
+            height: 60px;
+            background: linear-gradient(to bottom, var(--accent-gold), transparent);
+            animation: scrollPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes scrollPulse {
+            0%, 100% { opacity: 0.3; transform: scaleY(1); }
+            50% { opacity: 1; transform: scaleY(1.2); }
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Main Content */
+        .content {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 0 40px;
+        }
+
+        /* Section Styling */
+        .section {
+            padding: 100px 0;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .section-header {
+            margin-bottom: 60px;
+        }
+
+        .section-number {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            letter-spacing: 0.15em;
+            color: var(--accent-gold);
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 400;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+
+        .section-lead {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+        }
+
+        /* Key Concepts Grid */
+        .concepts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+
+        .concept-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 2px;
+            padding: 40px;
+            position: relative;
+            transition: all 0.4s ease;
+        }
+
+        .concept-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--gradient-gold);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s ease;
+        }
+
+        .concept-card:hover {
+            border-color: var(--border-medium);
+            transform: translateY(-4px);
+        }
+
+        .concept-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .concept-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            font-size: 20px;
+        }
+
+        .concept-title {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .concept-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.8;
+        }
+
+        /* AUC Scale */
+        .auc-scale {
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            padding: 50px;
+            margin-top: 60px;
+        }
+
+        .auc-scale-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+        }
+
+        .auc-bar {
+            display: flex;
+            align-items: stretch;
+            height: 80px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .auc-segment {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .auc-segment:hover {
+            transform: scaleY(1.1);
+        }
+
+        .auc-segment.poor { background: #4a3f35; }
+        .auc-segment.fair { background: #5c4a3a; }
+        .auc-segment.good { background: #6b5a42; }
+        .auc-segment.very-good { background: #8b7355; }
+        .auc-segment.excellent { background: var(--accent-gold); color: var(--bg-primary); }
+
+        .auc-value {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .auc-label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        /* Glossary */
+        .glossary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .glossary-item {
+            background: var(--bg-secondary);
+            padding: 25px 30px;
+            border-left: 3px solid var(--accent-gold);
+            transition: all 0.3s ease;
+        }
+
+        .glossary-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .glossary-term {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+            letter-spacing: 0.05em;
+        }
+
+        .glossary-def {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* Use Cases */
+        .use-cases {
+            padding: 100px 0;
+        }
+
+        .use-case {
+            margin-bottom: 40px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 2px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .use-case:hover {
+            border-color: var(--border-medium);
+        }
+
+        .use-case summary {
+            padding: 30px 40px;
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .use-case summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .use-case summary:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .use-case-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .use-case-number {
+            font-family: var(--font-display);
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: var(--accent-gold);
+            line-height: 1;
+        }
+
+        .use-case-info h3 {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .use-case-info span {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .use-case-metrics {
+            display: flex;
+            gap: 25px;
+        }
+
+        .metric-pill {
+            background: var(--bg-tertiary);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        .metric-pill.auc {
+            color: var(--accent-gold);
+            border: 1px solid var(--accent-gold-dim);
+        }
+
+        .metric-pill.rating {
+            color: var(--accent-emerald);
+        }
+
+        .use-case-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .use-case-toggle::after {
+            content: '+';
+            font-size: 1.5rem;
+            font-weight: 300;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+
+        .use-case[open] .use-case-toggle::after {
+            content: '−';
+        }
+
+        .use-case-content {
+            padding: 50px;
+            background: var(--bg-card);
+        }
+
+        .interactive-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(212, 168, 83, 0.15);
+            color: var(--accent-gold);
+            padding: 4px 12px;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            margin-left: 15px;
+        }
+
+        .interactive-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* Scenario Box */
+        .scenario-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-sky);
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .scenario-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            color: var(--accent-sky);
+            margin-bottom: 10px;
+        }
+
+        .scenario-text {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* Controls Grid */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        /* Fraud use case: sidebar + charts + info sidebar */
+        .fraud-layout {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+
+        .fraud-sidebar {
+            flex: 0 0 280px;
+        }
+
+        .fraud-sidebar .control-item {
+            padding: 22px;
+        }
+
+        .fraud-main {
+            flex: 1 1 auto;
+            min-width: 0; /* prevents Plotly containers from overflowing in flex layouts */
+        }
+
+        .fraud-info-sidebar {
+            flex: 0 0 380px;
+            position: sticky;
+            top: 20px;
+        }
+
+        .fraud-info-sidebar .optimal-box {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .fraud-info-sidebar .tradeoff-box {
+            margin-top: 0;
+        }
+
+        .model-description-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-gold);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+        .model-description-title {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+        }
+
+        .model-description-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .controls-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-item {
+            background: var(--bg-secondary);
+            padding: 25px;
+            border-radius: 2px;
+        }
+
+        .control-item.highlight {
+            background: linear-gradient(135deg, rgba(212, 168, 83, 0.1) 0%, rgba(212, 168, 83, 0.05) 100%);
+            border: 1px solid rgba(212, 168, 83, 0.2);
+        }
+
+        .control-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .control-value {
+            font-family: var(--font-mono);
+            font-size: 1.4rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .control-item.highlight .control-value {
+            color: var(--accent-gold);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            margin-top: 15px;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Metrics Row */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .metric-card {
+            background: var(--bg-secondary);
+            padding: 30px;
+            text-align: center;
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--accent-gold);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover::after {
+            transform: scaleX(1);
+        }
+
+        .metric-value {
+            font-family: var(--font-mono);
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .metric-value.positive { color: var(--accent-emerald); }
+        .metric-value.neutral { color: var(--accent-gold); }
+
+        .metric-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Chart Container */
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        /* Optimal Point Box */
+        .optimal-box {
+            background: linear-gradient(135deg, rgba(74, 222, 128, 0.08) 0%, rgba(74, 222, 128, 0.03) 100%);
+            border: 1px solid rgba(74, 222, 128, 0.2);
+            border-radius: 2px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .optimal-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            color: var(--accent-emerald);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .optimal-title::before {
+            content: '★';
+        }
+
+        .optimal-text {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .optimal-text strong {
+            color: var(--text-primary);
+        }
+
+        /* Tradeoff Box */
+        .tradeoff-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-rose);
+            padding: 25px 30px;
+            margin-top: 30px;
+        }
+
+        .tradeoff-title {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            color: var(--accent-rose);
+            margin-bottom: 10px;
+        }
+
+        .tradeoff-text {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* Methodology Section */
+        .methodology {
+            background: var(--bg-secondary);
+            padding: 60px;
+            margin-top: 80px;
+            border-radius: 2px;
+        }
+
+        .methodology-title {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .methodology-title::before {
+            content: '';
+            width: 40px;
+            height: 2px;
+            background: var(--accent-gold);
+        }
+
+        .methodology-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+
+        .methodology-item h4 {
+            color: var(--accent-gold);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            margin-bottom: 15px;
+        }
+
+        .methodology-item p {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .methodology-item ul {
+            color: var(--text-secondary);
+            margin-top: 15px;
+            padding-left: 20px;
+        }
+
+        .methodology-item li {
+            margin-bottom: 8px;
+        }
+
+        .methodology-item code {
+            font-family: var(--font-mono);
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            color: var(--accent-gold);
+        }
+
+        /* Callout */
+        .callout {
+            background: linear-gradient(135deg, rgba(212, 168, 83, 0.1) 0%, rgba(212, 168, 83, 0.05) 100%);
+            border: 1px solid rgba(212, 168, 83, 0.2);
+            padding: 30px;
+            margin-top: 40px;
+            border-radius: 2px;
+        }
+
+        .callout-title {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            letter-spacing: 0.1em;
+            color: var(--accent-gold);
+            margin-bottom: 12px;
+        }
+
+        .callout-text {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 60px 40px;
+            text-align: center;
+            border-top: 1px solid var(--border-subtle);
+            margin-top: 100px;
+        }
+
+        .footer-text {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .fraud-layout {
+                flex-wrap: wrap;
+            }
+
+            .fraud-sidebar {
+                flex: 0 0 280px;
+            }
+
+            .fraud-main {
+                flex: 1 1 100%;
+                order: 2;
+            }
+
+            .fraud-info-sidebar {
+                flex: 1 1 auto;
+                position: static;
+                order: 1;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .fraud-layout {
+                flex-direction: column;
+            }
+
+            .fraud-sidebar {
+                flex: 1 1 auto;
+                margin-bottom: 30px;
+            }
+
+            .fraud-info-sidebar {
+                flex: 1 1 auto;
+                margin-bottom: 30px;
+            }
+
+            .controls-sidebar {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero {
+                padding: 40px 20px;
+            }
+
+            .content {
+                padding: 0 20px;
+            }
+
+            .section {
+                padding: 60px 0;
+            }
+
+            .metrics-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .use-case summary {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
+            }
+
+            .use-case-metrics {
+                flex-wrap: wrap;
+            }
+
+            .use-case-content {
+                padding: 30px;
+            }
+
+            .methodology {
+                padding: 40px 30px;
+            }
+        }
+
+        /* Plotly overrides */
+        .js-plotly-plot .plotly .modebar {
+            background: transparent !important;
+        }
+
+        .js-plotly-plot .plotly .modebar-btn path {
+            fill: var(--text-muted) !important;
+        }
+
+        /* Training status (Fraud use case) */
+        #training-status {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-medium);
+            background: rgba(255, 255, 255, 0.03);
+            line-height: 1.4;
+        }
+
+        #training-status[data-state="training"] {
+            color: var(--accent-gold);
+            border-color: rgba(212, 168, 83, 0.25);
+            background: rgba(212, 168, 83, 0.06);
+        }
+
+        #training-status[data-state="done"] {
+            color: var(--accent-emerald);
+            border-color: rgba(74, 222, 128, 0.25);
+            background: rgba(74, 222, 128, 0.06);
+        }
+
+        #training-status[data-state="error"] {
+            color: var(--accent-red);
+            border-color: rgba(239, 68, 68, 0.25);
+            background: rgba(239, 68, 68, 0.06);
+        }
+
+        /* Training spinner */
+        .training-spinner {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        #model-type:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+        }
+
+        /* AUC quality states (Fraud use case) */
+        .metric-card.auc-bad {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .metric-card.auc-needs-improvement {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.16) 0%, rgba(251, 191, 36, 0.05) 100%);
+            border: 1px solid rgba(251, 191, 36, 0.25);
+        }
+
+        .metric-card.auc-good {
+            background: linear-gradient(135deg, rgba(74, 222, 128, 0.15) 0%, rgba(74, 222, 128, 0.05) 100%);
+            border: 1px solid rgba(74, 222, 128, 0.25);
+        }
+
+        .metric-card.auc-bad .metric-value { color: var(--accent-red); }
+        .metric-card.auc-needs-improvement .metric-value { color: var(--accent-yellow); }
+        .metric-card.auc-good .metric-value { color: var(--accent-emerald); }
+
+        /* False alarm quality states */
+        .metric-card.fa-good {
+            background: linear-gradient(135deg, rgba(74, 222, 128, 0.15) 0%, rgba(74, 222, 128, 0.05) 100%);
+            border: 1px solid rgba(74, 222, 128, 0.25);
+        }
+
+        .metric-card.fa-warning {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.05) 100%);
+            border: 1px solid rgba(251, 191, 36, 0.25);
+        }
+
+        .metric-card.fa-bad {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .metric-card.fa-good .metric-value { color: var(--accent-emerald); }
+        .metric-card.fa-warning .metric-value { color: var(--accent-yellow); }
+        .metric-card.fa-bad .metric-value { color: var(--accent-red); }
+    </style>
+</head>
+<body>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <span class="hero-eyebrow">Insurance Analytics Guide</span>
+            <h1 class="hero-title">The <em>ROC Curve</em> Playbook</h1>
+            <p class="hero-subtitle">How machine learning translates into millions saved—a visual guide to risk classification tradeoffs</p>
+        </div>
+        <div class="scroll-indicator">
+            <span>Scroll to explore</span>
+            <div class="scroll-line"></div>
+        </div>
+    </section>
+
+    <main class="content">
+        <!-- Why It Matters -->
+        <section class="section">
+            <div class="section-header">
+                <span class="section-number">01 — The Fundamentals</span>
+                <h2 class="section-title">Why ROC & AUC Matter</h2>
+                <p class="section-lead">When building classification models, accuracy alone is misleading. If only 2% of claims are fraudulent, predicting "not fraud" for everything achieves 98% accuracy—but catches zero fraud.</p>
+            </div>
+
+            <div class="concepts-grid">
+                <div class="concept-card">
+                    <div class="concept-icon">⚖️</div>
+                    <h3 class="concept-title">The Core Problem</h3>
+                    <p class="concept-text">Every classification model faces a fundamental tradeoff: catching more positives means accepting more false alarms. ROC curves visualize this entire spectrum—showing exactly what you gain and lose at each threshold.</p>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">📊</div>
+                    <h3 class="concept-title">The Gold Standard</h3>
+                    <p class="concept-text">AUC compresses the entire ROC curve into a single number between 0.5 and 1.0. It's the probability that your model ranks a random positive higher than a random negative—pure discriminative power.</p>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">💰</div>
+                    <h3 class="concept-title">From Metrics to Dollars</h3>
+                    <p class="concept-text">The real power is translating ML performance into business impact. Once you know each outcome's cost, you can find the optimal threshold—the exact point that maximizes value.</p>
+                </div>
+            </div>
+
+            <div class="auc-scale">
+                <h3 class="auc-scale-title">The AUC Performance Scale</h3>
+                <div class="auc-bar">
+                    <div class="auc-segment poor">
+                        <span class="auc-value">0.5</span>
+                        <span class="auc-label">Random</span>
+                    </div>
+                    <div class="auc-segment fair">
+                        <span class="auc-value">0.6-0.7</span>
+                        <span class="auc-label">Fair</span>
+                    </div>
+                    <div class="auc-segment good">
+                        <span class="auc-value">0.7-0.8</span>
+                        <span class="auc-label">Good</span>
+                    </div>
+                    <div class="auc-segment very-good">
+                        <span class="auc-value">0.8-0.9</span>
+                        <span class="auc-label">Very Good</span>
+                    </div>
+                    <div class="auc-segment excellent">
+                        <span class="auc-value">0.9+</span>
+                        <span class="auc-label">Excellent</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Glossary -->
+        <section class="section" id="glossary">
+            <div class="section-header">
+                <span class="section-number">02 — Terminology</span>
+                <h2 class="section-title">Acronyms & Definitions</h2>
+            </div>
+
+            <div class="glossary-grid">
+                <div class="glossary-item">
+                    <div class="glossary-term">ROC</div>
+                    <div class="glossary-def">Receiver Operating Characteristic—a graph showing model performance across all classification thresholds</div>
+                </div>
+                <div class="glossary-item">
+                    <div class="glossary-term">AUC</div>
+                    <div class="glossary-def">Area Under the Curve—a single number (0-1) summarizing overall model performance; higher is better</div>
+                </div>
+                <div class="glossary-item">
+                    <div class="glossary-term">TPR</div>
+                    <div class="glossary-def">True Positive Rate (Sensitivity)—% of actual positives correctly identified</div>
+                </div>
+                <div class="glossary-item">
+                    <div class="glossary-term">FPR</div>
+                    <div class="glossary-def">False Positive Rate—% of actual negatives incorrectly flagged as positive</div>
+                </div>
+                <div class="glossary-item">
+                    <div class="glossary-term">Threshold</div>
+                    <div class="glossary-def">Decision cutoff point—the probability score above which the model classifies as positive</div>
+                </div>
+                <div class="glossary-item">
+                    <div class="glossary-term">GLMs</div>
+                    <div class="glossary-def">Generalized Linear Models—statistical models commonly used in insurance pricing</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Use Cases -->
+        <section class="use-cases">
+            <div class="section-header">
+                <span class="section-number">03 — Real-World Applications</span>
+                <h2 class="section-title">Insurance Use Cases</h2>
+                <p class="section-lead">Click each scenario to explore the ROC curve dynamics and business impact</p>
+            </div>
+
+            <!-- Use Case 1: Fraud Detection -->
+            <details class="use-case">
+                <summary>
+                    <div class="use-case-header">
+                        <span class="use-case-number">01</span>
+                        <div class="use-case-info">
+                            <h3>Fraud Detection Model<span class="interactive-badge">INTERACTIVE</span></h3>
+                            <span>Claims investigation optimization</span>
+                        </div>
+                    </div>
+                    <div class="use-case-metrics">
+                        <span class="metric-pill auc" id="header-auc">AUC: Computing...</span>
+                        <span class="metric-pill rating" id="header-rating">Real ML</span>
+                    </div>
+                    <div class="use-case-toggle"></div>
+                </summary>
+                <div class="use-case-content">
+                    <div class="scenario-box">
+                        <div class="scenario-label">THE CHALLENGE</div>
+                        <p class="scenario-text" id="fraud-scenario-text">You process 100,000 claims per month. About 5% are fraudulent (~5,000 claims). Each fraudulent claim costs $15,000 on average. Each investigation costs $500.</p>
+                    </div>
+
+                    <div class="fraud-layout">
+                        <aside class="fraud-sidebar">
+                            <div class="controls-sidebar">
+                                <div class="control-item highlight">
+                                    <span class="control-label">ML Model Type</span>
+                                    <select id="model-type" style="width: 100%; padding: 10px; margin-top: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-medium); color: var(--text-primary); font-family: var(--font-mono); font-size: 0.9rem; border-radius: 2px; cursor: pointer;">
+                                <option value="logistic">Logistic Regression</option>
+                                <option value="hist_gbdt">Gradient Boosting</option>
+                                <option value="extra_trees">Extra Trees</option>
+                                <option value="random_forest">Random Forest</option>
+                                    </select>
+                                    <div id="training-status" style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.75rem; display: none;">
+                                        <span class="training-spinner">⟳</span> Training model...
+                                    </div>
+                                </div>
+                                <div class="control-item">
+                                    <span class="control-label">Claims per Month</span>
+                                    <div class="control-value" id="claims-value">100,000</div>
+                                    <input type="range" id="claims-slider" min="10000" max="500000" step="10000" value="100000">
+                                </div>
+                                <div class="control-item">
+                                    <span class="control-label">Fraud Rate</span>
+                                    <div class="control-value" id="fraud-rate-value">5%</div>
+                                    <input type="range" id="fraud-rate-slider" min="0.5" max="10" step="0.5" value="5">
+                                </div>
+                                <div class="control-item">
+                                    <span class="control-label">Average Fraud Cost</span>
+                                    <div class="control-value" id="fraud-cost-value">$15,000</div>
+                                    <input type="range" id="fraud-cost-slider" min="1000" max="100000" step="1000" value="15000">
+                                </div>
+                                <div class="control-item">
+                                    <span class="control-label">Investigation Cost</span>
+                                    <div class="control-value" id="investigation-cost-value">$500</div>
+                                    <input type="range" id="investigation-cost-slider" min="50" max="2000" step="50" value="500">
+                                </div>
+                            </div>
+                        </aside>
+
+                        <div class="fraud-main">
+                            <div class="metrics-row">
+                                <div class="metric-card" id="auc-card">
+                                    <div class="metric-value neutral" id="auc-metric">—</div>
+                                    <div class="metric-label">Computed AUC</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value" id="fraud-caught-metric">85%</div>
+                                    <div class="metric-label">Fraud Caught</div>
+                                </div>
+                                <div class="metric-card" id="false-alarm-card">
+                                    <div class="metric-value" id="false-alarm-metric">5%</div>
+                                    <div class="metric-label">False Alarms</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value positive" id="net-benefit-metric">$22.3M</div>
+                                    <div class="metric-label">Net Benefit</div>
+                                </div>
+                            </div>
+
+                            <div class="chart-container">
+                                <div id="fraud-chart"></div>
+                            </div>
+
+                            <div class="chart-container">
+                                <div id="fraud-business-chart"></div>
+                            </div>
+                        </div>
+
+                        <aside class="fraud-info-sidebar">
+                            <div class="model-description-box" id="model-description">
+                                <div class="model-description-title">Logistic Regression</div>
+                                <p class="model-description-text">Linear baseline. Fast and interpretable, but can't capture non-linear fraud patterns. Use for baseline comparison or when explainability is required.</p>
+                            </div>
+
+                            <div class="optimal-box" id="fraud-optimal-text">
+                                <div class="optimal-title">Optimal Operating Point</div>
+                                <p class="optimal-text">
+                                    At <strong>threshold = 0.65</strong>: Catch 85% of fraud (1,700 frauds) while flagging only 5% of legitimate claims (4,900 investigations).<br><br>
+                                    <strong>ROI:</strong> Prevent $25.5M in fraud, spend $3.2M on investigations = <strong>$22.3M net benefit</strong>
+                                </p>
+                            </div>
+
+                            <div class="tradeoff-box">
+                                <div class="tradeoff-title">BUSINESS TRADEOFF</div>
+                                <p class="tradeoff-text">
+                                    <strong>Move left (stricter):</strong> Miss more fraud, lose money<br>
+                                    <strong>Move right (looser):</strong> Waste investigator time on false alarms, anger customers
+                                </p>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Use Case 2: Underwriting -->
+            <details class="use-case">
+                <summary>
+                    <div class="use-case-header">
+                        <span class="use-case-number">02</span>
+                        <div class="use-case-info">
+                            <h3>Underwriting / Risk Pricing</h3>
+                            <span>Premium optimization & adverse selection</span>
+                        </div>
+                    </div>
+                    <div class="use-case-metrics">
+                        <span class="metric-pill auc">AUC: 0.78</span>
+                        <span class="metric-pill rating">Good</span>
+                    </div>
+                    <div class="use-case-toggle"></div>
+                </summary>
+                <div class="use-case-content">
+                    <div class="scenario-box">
+                        <div class="scenario-label">THE CHALLENGE</div>
+                        <p class="scenario-text">Predict which applicants will file claims in the next year. High-risk customers need higher premiums. Reject too many good risks = lose market share to competitors.</p>
+                    </div>
+
+                    <div class="metrics-row">
+                        <div class="metric-card">
+                            <div class="metric-value neutral">0.78</div>
+                            <div class="metric-label">AUC Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">70%</div>
+                            <div class="metric-label">High-Risk Identified</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">20%</div>
+                            <div class="metric-label">Good Risks Over-Priced</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value positive">+12%</div>
+                            <div class="metric-label">Premium Lift</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <div id="underwriting-chart"></div>
+                    </div>
+
+                    <div class="chart-container">
+                        <div id="underwriting-business-chart"></div>
+                    </div>
+
+                    <div class="optimal-box">
+                        <div class="optimal-title">Optimal Operating Point</div>
+                        <p class="optimal-text">
+                            At <strong>threshold = 0.45</strong>: Correctly price 70% of high-risk applicants while only over-pricing 20% of good risks.<br><br>
+                            <strong>Competitive edge:</strong> Better than industry average (AUC ~0.65) = ability to offer better rates to good drivers while protecting margin
+                        </p>
+                    </div>
+
+                    <div class="tradeoff-box">
+                        <div class="tradeoff-title">BUSINESS TRADEOFF</div>
+                        <p class="tradeoff-text">
+                            <strong>Move left (conservative):</strong> Price everyone high, lose good customers to competitors<br>
+                            <strong>Move right (aggressive):</strong> Win market share but underwrite unprofitable risks
+                        </p>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Use Case 3: Claims Triage -->
+            <details class="use-case">
+                <summary>
+                    <div class="use-case-header">
+                        <span class="use-case-number">03</span>
+                        <div class="use-case-info">
+                            <h3>Claims Triage Model</h3>
+                            <span>Adjuster workload optimization</span>
+                        </div>
+                    </div>
+                    <div class="use-case-metrics">
+                        <span class="metric-pill auc">AUC: 0.88</span>
+                        <span class="metric-pill rating">Very Good</span>
+                    </div>
+                    <div class="use-case-toggle"></div>
+                </summary>
+                <div class="use-case-content">
+                    <div class="scenario-box">
+                        <div class="scenario-label">THE CHALLENGE</div>
+                        <p class="scenario-text">50,000 claims per month. Only 10 senior adjusters (500 complex reviews/month capacity). Need to route the right 10% of claims to expert review to prevent costly errors.</p>
+                    </div>
+
+                    <div class="metrics-row">
+                        <div class="metric-card">
+                            <div class="metric-value neutral">0.88</div>
+                            <div class="metric-label">AUC Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">75%</div>
+                            <div class="metric-label">Complex Cases Found</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">8%</div>
+                            <div class="metric-label">Simple Cases Escalated</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value positive">-40%</div>
+                            <div class="metric-label">Settlement Errors</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <div id="triage-chart"></div>
+                    </div>
+
+                    <div class="chart-container">
+                        <div id="triage-business-chart"></div>
+                    </div>
+
+                    <div class="optimal-box">
+                        <div class="optimal-title">Optimal Operating Point</div>
+                        <p class="optimal-text">
+                            At <strong>threshold = 0.55</strong>: Route 75% of truly complex claims to senior adjusters while only mis-routing 8% of simple claims.<br><br>
+                            <strong>Resource optimization:</strong> Senior adjusters focus on cases requiring expertise, reducing settlement errors by 40%
+                        </p>
+                    </div>
+
+                    <div class="tradeoff-box">
+                        <div class="tradeoff-title">BUSINESS TRADEOFF</div>
+                        <p class="tradeoff-text">
+                            <strong>Move left (conservative):</strong> Senior adjusters get bored reviewing simple cases, retention drops<br>
+                            <strong>Move right (aggressive):</strong> Junior adjusters mishandle complex cases, overpay settlements
+                        </p>
+                    </div>
+                </div>
+            </details>
+        </section>
+
+        <!-- Methodology -->
+        <div class="methodology">
+            <h2 class="methodology-title">About These Visualizations</h2>
+
+            <div class="methodology-grid">
+                <div class="methodology-item">
+                    <h4>REAL ML (PYTHON BACKEND)</h4>
+                    <p>The <strong>Fraud Detection</strong> use case trains real models on synthetic insurance data (server-side) and returns the computed ROC curve and AUC:</p>
+                    <ul>
+                        <li><strong>scikit-learn</strong> — Logistic Regression, Random Forest, Extra Trees, Gradient Boosting</li>
+                        <li>Models train on synthetic insurance data with realistic fraud signals</li>
+                        <li>AUC is computed from real predictions, not predetermined</li>
+                    </ul>
+                    <p style="margin-top: 15px;">Try switching model types to see how ROC/AUC changes across algorithms.</p>
+                </div>
+                <div class="methodology-item">
+                    <h4>FRAUD DETECTION FEATURES</h4>
+                    <p>The ML model learns from 6 engineered features:</p>
+                    <ul>
+                        <li><strong>claim_amount</strong> — Log-normal distribution (frauds claim more)</li>
+                        <li><strong>policy_age_days</strong> — Newer policies = higher fraud risk</li>
+                        <li><strong>previous_claims</strong> — Fraudsters have more history</li>
+                        <li><strong>is_weekend</strong> — Fraudulent claims more likely on weekends</li>
+                        <li><strong>days_to_report</strong> — Fraudsters report faster/slower</li>
+                        <li><strong>claim_to_premium_ratio</strong> — Frauds have higher ratios</li>
+                    </ul>
+                </div>
+                <div class="methodology-item">
+                    <h4>STATIC USE CASES</h4>
+                    <p>Underwriting and Claims Triage still use parametric curves for teaching:</p>
+                    <ul>
+                        <li><strong>Clarity:</strong> Clean examples without real-world noise</li>
+                        <li><strong>Control:</strong> Precise AUC values for comparison</li>
+                        <li><strong>Focus:</strong> Business impact calculations remain the star</li>
+                    </ul>
+                    <p style="margin-top: 15px;">Try the Fraud Detection model to see how real ML differs from synthetic curves!</p>
+                </div>
+            </div>
+
+            <div class="callout">
+                <div class="callout-title">KEY TAKEAWAY</div>
+                <p class="callout-text">The value isn't in these specific numbers being "real"—it's in understanding how to translate technical ML metrics (AUC, TPR, FPR) into business language (dollars saved, ROI, resource optimization). This is the conversation you'll have with insurance executives.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p class="footer-text">Insurance ROC Curve Playbook — Visual Analytics Guide</p>
+    </footer>
+
+    <script type="module" src="index.js"></script>
+</body>
+</html>

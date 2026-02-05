@@ -1,0 +1,16 @@
+{
+  "name": "insurance-use-case-ml",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Insurance ROC/AUC use cases demo (static site served via a small HTTP server)",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
