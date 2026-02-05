@@ -1,5 +1,21 @@
 # insurance-use-case-ml
 
+## Purpose
+
+This project serves as both an ML learning tool and an AI coding experiment:
+
+**ML Learning**
+- Understand AUC/ROC curves through interactive insurance use cases (fraud detection, underwriting, claims triage)
+- See how different models (logistic regression, gradient boosting, random forest) perform on the same problem
+- Explore the business tradeoffs between catching fraud and generating false alarms
+
+**AI-Assisted Development Experiment**
+- Built primarily with Claude Code and Warp to evaluate their capabilities on real UI and ML code
+- Testing which approach works best: Warp alone, Claude Code alone, or a combination
+- Tracking how quickly Pro tier credits deplete during sustained coding sessions
+
+---
+
 Interactive ROC/AUC insurance use-case demo served by a single **Python FastAPI** service.
 
 - **Frontend**: static UI in `public/` (entrypoint: `public/index.html`)
